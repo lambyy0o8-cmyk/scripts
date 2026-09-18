@@ -1,12 +1,12 @@
 --[[
-    Code Sniper (Announcement Edition) + UI — LamByy System — v3.2
-    Убирает HTML-теги, ждёт второй анонс с кодом и берёт последнее слово.
+    Code Sniper v3.3
+    После "code is:" собирает N следующих анонсов и склеивает их в код.
+    "Слов в коде" = сколько анонсов собрать.
 ]]
 
 local DEFAULTS = {
     Trigger    = "code is:",
-    Offset     = 0,
-    MaxWords   = 1,
+    MaxWords   = 1,      -- сколько анонсов собрать после триггера
     AutoRedeem = true,
     Cooldown   = 2,
     Dedup      = 15,
@@ -61,19 +61,17 @@ local function extractAfterTrigger(text)
     local s = string.find(low, string.lower(CONFIG.Trigger), 1, true)
     if not s then return nil end
     local after = string.sub(text, s + #CONFIG.Trigger)
-    local words = {}
-    for w in string.gmatch(after, "%S+") do words[#words + 1] = w end
-    local idx = 1
-    while idx <= #words and isIgnored(words[idx]) do idx += 1 end
-    idx += CONFIG.Offset
-    if idx > #words then return nil end
-    local picked, last = {}, (CONFIG.MaxWords > 0) and math.min(idx + CONFIG.MaxWords - 1, #words) or #words
-    for i = idx, last do picked[#picked + 1] = words[i] end
-    return cleanCode(table.concat(picked, ""))
+    for w in string.gmatch(after, "%S+") do
+        if not isIgnored(w) then
+            local c = cleanCode(w)
+            if c then return c end
+        end
+    end
+    return nil
 end
 
--- берёт текст после последнего ":" (без имени отправителя), возвращает последнее осмысленное слово
-local function firstMeaningfulWord(text)
+-- берём ОДНО осмысленное слово из анонса (тело после последнего ":")
+local function lastMeaningfulWord(text)
     if type(text) ~= "string" then return nil end
     text = stripTags(text)
     local colonPos = nil
@@ -116,7 +114,7 @@ local hc = Instance.new("UICorner") hc.CornerRadius = UDim.new(0, 10) hc.Parent 
 local hfix = Instance.new("Frame") hfix.Size = UDim2.new(1,0,0,10) hfix.Position = UDim2.new(0,0,1,-10) hfix.BackgroundColor3 = Color3.fromRGB(25,25,30) hfix.BorderSizePixel = 0 hfix.Parent = header
 
 local title = Instance.new("TextLabel")
-title.Text = "  🎯 Code Sniper v3.2"
+title.Text = "  🎯 Code Sniper v3.3"
 title.Size = UDim2.new(1, -80, 1, 0)
 title.BackgroundTransparency = 1
 title.Font = Enum.Font.GothamBold
@@ -185,25 +183,23 @@ local function makeToggle(order, labelText, default)
 end
 
 local triggerBox = makeTextBox(0, "Триггер:", CONFIG.Trigger)
-local offsetBox  = makeTextBox(1, "Пропуск слов:", CONFIG.Offset)
-local maxBox     = makeTextBox(2, "Слов в коде:", CONFIG.MaxWords)
-local coolBox    = makeTextBox(3, "Кулдаун (сек):", CONFIG.Cooldown)
-local dedupBox   = makeTextBox(4, "Дедуп (сек):", CONFIG.Dedup)
-local autoBtn, getAuto = makeToggle(5, "Авто-ввод:", CONFIG.AutoRedeem)
-local waitBtn, getWait = makeToggle(6, "Ждать след. анонс:", CONFIG.WaitNext)
-local dbgBtn, getDbg   = makeToggle(7, "Debug лог:", CONFIG.Debug)
+local maxBox     = makeTextBox(1, "Анонсов для кода:", CONFIG.MaxWords)
+local coolBox    = makeTextBox(2, "Кулдаун (сек):", CONFIG.Cooldown)
+local dedupBox   = makeTextBox(3, "Дедуп (сек):", CONFIG.Dedup)
+local autoBtn, getAuto = makeToggle(4, "Авто-ввод:", CONFIG.AutoRedeem)
+local waitBtn, getWait = makeToggle(5, "Ждать след. анонс:", CONFIG.WaitNext)
+local dbgBtn, getDbg   = makeToggle(6, "Debug лог:", CONFIG.Debug)
 
 local function applySettings()
     CONFIG.Trigger  = triggerBox.Text ~= "" and triggerBox.Text or "code is:"
-    CONFIG.Offset   = math.max(0, math.floor(tonumber(offsetBox.Text) or 0))
-    CONFIG.MaxWords = math.max(0, math.floor(tonumber(maxBox.Text) or 0))
+    CONFIG.MaxWords = math.max(1, math.floor(tonumber(maxBox.Text) or 1))
     CONFIG.Cooldown = math.max(0, tonumber(coolBox.Text) or 0)
     CONFIG.Dedup    = math.max(0, tonumber(dedupBox.Text) or 0)
     CONFIG.AutoRedeem = getAuto()
     CONFIG.WaitNext   = getWait()
     CONFIG.Debug      = getDbg()
 end
-for _, box in ipairs({triggerBox, offsetBox, maxBox, coolBox, dedupBox}) do
+for _, box in ipairs({triggerBox, maxBox, coolBox, dedupBox}) do
     box.FocusLost:Connect(applySettings)
 end
 autoBtn.MouseButton1Click:Connect(function() task.wait() applySettings() end)
@@ -212,29 +208,29 @@ dbgBtn.MouseButton1Click:Connect(function() task.wait() applySettings() end)
 
 local resetBtn = Instance.new("TextButton")
 resetBtn.Text = "Сбросить настройки"
-resetBtn.Size = UDim2.new(1,0,0,24) resetBtn.Position = UDim2.new(0,0,0,246)
+resetBtn.Size = UDim2.new(1,0,0,24) resetBtn.Position = UDim2.new(0,0,0,216)
 resetBtn.BackgroundColor3 = Color3.fromRGB(35,35,42) resetBtn.BorderSizePixel = 0
 resetBtn.Font = Enum.Font.Gotham resetBtn.TextSize = 11 resetBtn.TextColor3 = Color3.fromRGB(200,200,210)
 resetBtn.Parent = settings
 local rcc = Instance.new("UICorner") rcc.CornerRadius = UDim.new(0,6) rcc.Parent = resetBtn
 resetBtn.MouseButton1Click:Connect(function()
-    triggerBox.Text = DEFAULTS.Trigger offsetBox.Text = tostring(DEFAULTS.Offset)
-    maxBox.Text = tostring(DEFAULTS.MaxWords) coolBox.Text = tostring(DEFAULTS.Cooldown)
-    dedupBox.Text = tostring(DEFAULTS.Dedup) applySettings()
+    triggerBox.Text = DEFAULTS.Trigger maxBox.Text = tostring(DEFAULTS.MaxWords)
+    coolBox.Text = tostring(DEFAULTS.Cooldown) dedupBox.Text = tostring(DEFAULTS.Dedup)
+    applySettings()
 end)
 
 local divider = Instance.new("Frame")
-divider.Size = UDim2.new(1,-20,0,1) divider.Position = UDim2.new(0,10,0,298)
+divider.Size = UDim2.new(1,-20,0,1) divider.Position = UDim2.new(0,10,0,268)
 divider.BackgroundColor3 = Color3.fromRGB(50,50,60) divider.BorderSizePixel = 0 divider.Parent = main
 
 local logTitle = Instance.new("TextLabel")
-logTitle.Text = "  Лог" logTitle.Size = UDim2.new(1,-20,0,18) logTitle.Position = UDim2.new(0,10,0,304)
+logTitle.Text = "  Лог" logTitle.Size = UDim2.new(1,-20,0,18) logTitle.Position = UDim2.new(0,10,0,274)
 logTitle.BackgroundTransparency = 1 logTitle.Font = Enum.Font.GothamBold logTitle.TextSize = 11
 logTitle.TextColor3 = Color3.fromRGB(160,160,175) logTitle.TextXAlignment = Enum.TextXAlignment.Left
 logTitle.Parent = main
 
 local logScroll = Instance.new("ScrollingFrame")
-logScroll.Size = UDim2.new(1,-20,0,92) logScroll.Position = UDim2.new(0,10,0,324)
+logScroll.Size = UDim2.new(1,-20,0,100) logScroll.Position = UDim2.new(0,10,0,294)
 logScroll.BackgroundColor3 = Color3.fromRGB(12,12,15) logScroll.BorderSizePixel = 0
 logScroll.ScrollBarThickness = 4 logScroll.CanvasSize = UDim2.new(0,0,0,0)
 logScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y logScroll.Parent = main
@@ -323,8 +319,9 @@ manualBtn.MouseButton1Click:Connect(function()
 end)
 manualBox.FocusLost:Connect(function(enter) if enter then manualBtn:Fire() end end)
 
-local waitingForCode = false
-local waitStarted = 0
+local collecting = false
+local collected = {}
+local collectStart = 0
 
 NotifyRemote.OnClientEvent:Connect(function(text)
     text = tostring(text)
@@ -339,29 +336,35 @@ NotifyRemote.OnClientEvent:Connect(function(text)
         if code then
             log("найден: " .. code, Color3.fromRGB(230,230,150))
             if CONFIG.AutoRedeem then redeem(code, "анонс") end
-            waitingForCode = false
+            collecting = false
             return
         end
-        if CONFIG.WaitNext then
-            waitingForCode = true
-            waitStarted = os.clock()
-            log("жду код в след. анонсе…", Color3.fromRGB(200,200,120))
-        end
+        -- триггер без кода -> начинаем собирать N анонсов
+        collecting = true
+        collected = {}
+        collectStart = os.clock()
+        log("жду " .. CONFIG.MaxWords .. " анонс(ов) с кодом…", Color3.fromRGB(200,200,120))
         return
     end
 
-    if waitingForCode then
-        if os.clock() - waitStarted > CONFIG.WaitTime then
-            waitingForCode = false
+    if collecting then
+        if os.clock() - collectStart > CONFIG.WaitTime then
+            collecting = false
+            collected = {}
+            log("время ожидания истекло", Color3.fromRGB(200,150,120))
             return
         end
-        local code = firstMeaningfulWord(text)
-        if code then
-            waitingForCode = false
-            log("найден: " .. code, Color3.fromRGB(230,230,150))
-            if CONFIG.AutoRedeem then redeem(code, "след. анонс") end
+        local w = lastMeaningfulWord(text)
+        if w then
+            table.insert(collected, w)
+            log("часть " .. #collected .. "/" .. CONFIG.MaxWords .. ": " .. w, Color3.fromRGB(180,200,220))
+            if #collected >= CONFIG.MaxWords then
+                collecting = false
+                local finalCode = table.concat(collected, "")
+                log("найден: " .. finalCode, Color3.fromRGB(230,230,150))
+                if CONFIG.AutoRedeem then redeem(finalCode, "сбор анонсов") end
+            end
         end
-        return
     end
 end)
 
