@@ -1,8 +1,6 @@
 --[[
-    Code Sniper (Announcement Edition) + UI — LamByy System — v3
-    Режимы:
-      1) анонс сразу "code is: MEOWL"  -> возьмёт MEOWL
-      2) анонс "code is:" и СЛЕДУЮЩИЙ анонс "MEOWL" -> возьмёт MEOWL
+    Code Sniper (Announcement Edition) + UI — LamByy System — v3.1
+    Убирает HTML-теги (<phantom> и пр.), берёт код после ":" во втором анонсе.
 ]]
 
 local DEFAULTS = {
@@ -41,6 +39,10 @@ end
 if not NotifyRemote then warn("[CodeSniper] нет RemoteEvent") return end
 if not RedeemRemote then CONFIG.AutoRedeem = false end
 
+local function stripTags(s)
+    return (string.gsub(tostring(s), "<[^>]*>", ""))
+end
+
 local function isIgnored(w)
     local lw = string.lower(w)
     for _, x in ipairs(CONFIG.Ignore) do if lw == x then return true end end
@@ -54,6 +56,7 @@ end
 
 local function extractAfterTrigger(text)
     if type(text) ~= "string" or text == "" or CONFIG.Trigger == "" then return nil end
+    text = stripTags(text)
     local low = string.lower(text)
     local s = string.find(low, string.lower(CONFIG.Trigger), 1, true)
     if not s then return nil end
@@ -69,9 +72,16 @@ local function extractAfterTrigger(text)
     return cleanCode(table.concat(picked, ""))
 end
 
+-- во втором анонсе берём текст ПОСЛЕ последнего ":" (это сам текст анонса, без имени отправителя)
 local function firstMeaningfulWord(text)
     if type(text) ~= "string" then return nil end
-    for w in string.gmatch(text, "%S+") do
+    text = stripTags(text)
+    local _, colonPos = string.find(text, ":[^:]*$")
+    local body = colonPos and string.sub(text, colonPos + 1) or text
+    local words = {}
+    for w in string.gmatch(body, "%S+") do words[#words + 1] = w end
+    for i = #words, 1, -1 do
+        local w = words[i]
         if not isIgnored(w) then
             local c = cleanCode(w)
             if c then return c end
@@ -107,7 +117,7 @@ local hc = Instance.new("UICorner") hc.CornerRadius = UDim.new(0, 10) hc.Parent 
 local hfix = Instance.new("Frame") hfix.Size = UDim2.new(1,0,0,10) hfix.Position = UDim2.new(0,0,1,-10) hfix.BackgroundColor3 = Color3.fromRGB(25,25,30) hfix.BorderSizePixel = 0 hfix.Parent = header
 
 local title = Instance.new("TextLabel")
-title.Text = "  🎯 Code Sniper v3"
+title.Text = "  🎯 Code Sniper v3.1"
 title.Size = UDim2.new(1, -80, 1, 0)
 title.BackgroundTransparency = 1
 title.Font = Enum.Font.GothamBold
@@ -321,7 +331,8 @@ NotifyRemote.OnClientEvent:Connect(function(text)
     text = tostring(text)
     if CONFIG.Debug then log("анонс: " .. text, Color3.fromRGB(150,150,170)) end
 
-    local low = string.lower(text)
+    local clean = stripTags(text)
+    local low = string.lower(clean)
     local hasTrigger = string.find(low, string.lower(CONFIG.Trigger), 1, true) ~= nil
 
     if hasTrigger then
