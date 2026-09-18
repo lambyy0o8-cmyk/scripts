@@ -1,6 +1,6 @@
 --[[
-    Code Sniper (Announcement Edition) + UI — LamByy System — v3.1
-    Убирает HTML-теги (<phantom> и пр.), берёт код после ":" во втором анонсе.
+    Code Sniper (Announcement Edition) + UI — LamByy System — v3.2
+    Убирает HTML-теги, ждёт второй анонс с кодом и берёт последнее слово.
 ]]
 
 local DEFAULTS = {
@@ -12,7 +12,7 @@ local DEFAULTS = {
     Dedup      = 15,
     Debug      = false,
     WaitNext   = true,
-    WaitTime   = 20,
+    WaitTime   = 30,
     Ignore     = { "is", "code", ":", "the", "new", "promo", "promocode", "rainbow", "phantom" },
 }
 local CONFIG = table.clone(DEFAULTS)
@@ -72,22 +72,21 @@ local function extractAfterTrigger(text)
     return cleanCode(table.concat(picked, ""))
 end
 
--- во втором анонсе берём текст ПОСЛЕ последнего ":" (это сам текст анонса, без имени отправителя)
+-- берёт текст после последнего ":" (без имени отправителя), возвращает последнее осмысленное слово
 local function firstMeaningfulWord(text)
     if type(text) ~= "string" then return nil end
     text = stripTags(text)
-    local _, colonPos = string.find(text, ":[^:]*$")
+    local colonPos = nil
+    for p in string.gmatch(text, "():[^:]*$") do colonPos = p end
     local body = colonPos and string.sub(text, colonPos + 1) or text
-    local words = {}
-    for w in string.gmatch(body, "%S+") do words[#words + 1] = w end
-    for i = #words, 1, -1 do
-        local w = words[i]
+    local lastCode = nil
+    for w in string.gmatch(body, "%S+") do
         if not isIgnored(w) then
             local c = cleanCode(w)
-            if c then return c end
+            if c then lastCode = c end
         end
     end
-    return nil
+    return lastCode
 end
 
 local gui = Instance.new("ScreenGui")
@@ -117,7 +116,7 @@ local hc = Instance.new("UICorner") hc.CornerRadius = UDim.new(0, 10) hc.Parent 
 local hfix = Instance.new("Frame") hfix.Size = UDim2.new(1,0,0,10) hfix.Position = UDim2.new(0,0,1,-10) hfix.BackgroundColor3 = Color3.fromRGB(25,25,30) hfix.BorderSizePixel = 0 hfix.Parent = header
 
 local title = Instance.new("TextLabel")
-title.Text = "  🎯 Code Sniper v3.1"
+title.Text = "  🎯 Code Sniper v3.2"
 title.Size = UDim2.new(1, -80, 1, 0)
 title.BackgroundTransparency = 1
 title.Font = Enum.Font.GothamBold
@@ -357,11 +356,12 @@ NotifyRemote.OnClientEvent:Connect(function(text)
             return
         end
         local code = firstMeaningfulWord(text)
-        waitingForCode = false
         if code then
+            waitingForCode = false
             log("найден: " .. code, Color3.fromRGB(230,230,150))
             if CONFIG.AutoRedeem then redeem(code, "след. анонс") end
         end
+        return
     end
 end)
 
